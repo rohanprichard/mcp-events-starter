@@ -20,7 +20,7 @@ test("uses the MCP 2.0 request and result fields", async () => {
   assert.equal(response.result.resultType, "complete");
   assert.deepEqual(response.result.supportedVersions, ["2026-07-28"]);
   assert.deepEqual(response.result.capabilities, { tools: {}, events: {} });
-  assert.deepEqual(response.result._meta, { "io.modelcontextprotocol/serverInfo": { name: "chatgpt-mcp-events-starter", version: "0.1.0" } });
+  assert.deepEqual(response.result._meta, { "io.modelcontextprotocol/serverInfo": { name: "mcp-events-starter", version: "0.1.0" } });
   const list = await handleMcp({ ...request, method: "events/list" }, events, board) as { result: Record<string, unknown> };
   assert.equal(list.result.resultType, "complete");
   assert.equal((list.result.events as unknown[]).length, 1);

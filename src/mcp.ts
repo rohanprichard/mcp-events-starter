@@ -4,7 +4,7 @@ import { DemoBoard } from "./demo.js";
 import { EventError, Events } from "./events.js";
 
 const VERSION = "2026-07-28";
-const SERVER_INFO = { name: "chatgpt-mcp-events-starter", version: "0.1.0" };
+const SERVER_INFO = { name: "mcp-events-starter", version: "0.1.0" };
 const SERVER_META = { "io.modelcontextprotocol/serverInfo": SERVER_INFO };
 
 export function authorized(request: IncomingMessage, token: string) {

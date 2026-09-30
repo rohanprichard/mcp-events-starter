@@ -1,4 +1,4 @@
-# ChatGPT MCP Events starter
+# MCP Events starter
 
 A small TypeScript server that shows a `task.created` event with MCP 2.0 webhooks.
 
