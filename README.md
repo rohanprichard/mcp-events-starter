@@ -44,8 +44,10 @@ Use Node.js 20 or later. Use three terminal windows in this directory.
    ```sh
    curl -sS http://127.0.0.1:3000/mcp \
      -H "Authorization: Bearer $MCP_API_KEY" \
+     -H 'MCP-Protocol-Version: 2026-07-28' \
+     -H 'Mcp-Method: events/subscribe' \
      -H 'Content-Type: application/json' \
-     --data "$(node -e 'console.log(JSON.stringify({jsonrpc:"2.0",id:1,method:"events/subscribe",params:{name:"task.created",arguments:{project_id:"demo"},delivery:{mode:"webhook",url:"http://127.0.0.1:4000/hook",secret:process.env.WEBHOOK_SECRET}}}))')"
+     --data "$(node -e 'console.log(JSON.stringify({jsonrpc:"2.0",id:1,method:"events/subscribe",params:{name:"task.created",arguments:{project_id:"demo"},delivery:{mode:"webhook",url:"http://127.0.0.1:4000/hook",secret:process.env.WEBHOOK_SECRET},_meta:{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}))')"
    ```
 
    The response contains an `id` and `refreshBefore`. The receiver answers the signed, single-use challenge.
@@ -55,8 +57,11 @@ Use Node.js 20 or later. Use three terminal windows in this directory.
    ```sh
    curl -sS http://127.0.0.1:3000/mcp \
      -H "Authorization: Bearer $MCP_API_KEY" \
+     -H 'MCP-Protocol-Version: 2026-07-28' \
+     -H 'Mcp-Method: tools/call' \
+     -H 'Mcp-Name: create_task' \
      -H 'Content-Type: application/json' \
-     --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_task","arguments":{"title":"Ship the demo","project_id":"demo"}}}'
+     --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_task","arguments":{"title":"Ship the demo","project_id":"demo"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
    ```
 
    The receiver prints the `task.created` event. Use another project ID to test the filter. You can also add a task with `POST /demo/tasks` and the same bearer token.
@@ -66,17 +71,19 @@ Use Node.js 20 or later. Use three terminal windows in this directory.
    ```sh
    curl -sS http://127.0.0.1:3000/mcp \
      -H "Authorization: Bearer $MCP_API_KEY" \
+     -H 'MCP-Protocol-Version: 2026-07-28' \
+     -H 'Mcp-Method: events/unsubscribe' \
      -H 'Content-Type: application/json' \
-     --data '{"jsonrpc":"2.0","id":3,"method":"events/unsubscribe","params":{"name":"task.created","arguments":{"project_id":"demo"},"delivery":{"mode":"webhook","url":"http://127.0.0.1:4000/hook"}}}'
+     --data '{"jsonrpc":"2.0","id":3,"method":"events/unsubscribe","params":{"name":"task.created","arguments":{"project_id":"demo"},"delivery":{"mode":"webhook","url":"http://127.0.0.1:4000/hook"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
    ```
 
 ## The event contract
 
-Call `server/discover` to get the supported protocol version and the `events` capability. Call `events/list` to get the event schema. The `task.created` filter has an optional `project_id` value. The event data contains `id`, `title`, `project_id`, and `created_at`.
+Call `server/discover` to get the supported protocol version and the `events` capability. Call `events/list` to get the event schema. Send the `2026-07-28` version in each request's `_meta` and `MCP-Protocol-Version` header. Send `Mcp-Method` with each request. Send `Mcp-Name` when you call a tool. The `task.created` filter has an optional `project_id` value. The event data contains `id`, `title`, `project_id`, and `created_at`.
 
 The subscription ID depends on the owner, callback URL, event name, and filter. A repeated request with the same values refreshes the subscription. The server grants a lifetime of at most 24 hours and returns its end time in `refreshBefore`. This event does not support replay, so its `cursor` is `null`.
 
-The server sends one event per POST. It signs the exact JSON bytes with Standard Webhooks HMAC-SHA256. Each delivery has `webhook-id`, `webhook-timestamp`, `webhook-signature`, and `X-MCP-Subscription-Id`. The body stays below 256 KiB. The server retries temporary failures twice. It does not retry HTTP `410` or `413` responses.
+The server sends one event per POST. It signs the exact JSON bytes with Standard Webhooks HMAC-SHA256. Each delivery has `webhook-id`, `webhook-timestamp`, `webhook-signature`, and `X-MCP-Subscription-Id`. The body stays below 256 KiB. The server retries temporary failures twice. It does not retry HTTP `410` or `413` responses. A changed signing secret gets a five-minute rotation window. The server also caches a successful callback challenge for five minutes.
 
 ## Connect to ChatGPT
 
@@ -97,6 +104,6 @@ The tests cover the signed challenge, the signature bytes, callback URL checks, 
 
 ## Limits
 
-This server has one shared owner and one process. The JSON file keeps subscriptions after a restart, but the task board does not. The server has no event replay, OAuth, secret rotation window, delivery queue, or cross-process file lock. Add these parts before you use it for real user data or public traffic.
+This server has one shared owner and one process. The JSON file keeps subscriptions after a restart, but the task board does not. The server has no event replay, OAuth, delivery queue, or cross-process file lock. Add these parts before you use it for real user data or public traffic.
 
 MIT. Copyright 2026 Rohan Richard.

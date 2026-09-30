@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { DemoBoard } from "./demo.js";
 import { Events } from "./events.js";
-import { authorized, handleMcp, readJson, sendJson } from "./mcp.js";
+import { authorized, checkMcpHeaders, handleMcp, readJson, sendJson } from "./mcp.js";
 import { Store } from "./store.js";
 
 const configuredKey = process.env.MCP_API_KEY;
@@ -28,6 +28,11 @@ createServer(async (request, response) => {
   try {
     const input = await readJson(request);
     if (path === "/demo/tasks") return sendJson(response, 201, await board.create(input));
+    const headerError = checkMcpHeaders(input, request.headers);
+    if (headerError) {
+      const id = input && typeof input === "object" && !Array.isArray(input) ? (input as { id?: unknown }).id ?? null : null;
+      return sendJson(response, 400, { jsonrpc: "2.0", id, error: { code: headerError.code, message: headerError.message } });
+    }
     const output = await handleMcp(input, events, board);
     if (output === null) { response.writeHead(202); response.end(); return; }
     return sendJson(response, 200, output);

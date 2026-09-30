@@ -57,9 +57,37 @@ test("rejects a failed challenge and returns the callback error", async () => {
     const board = new DemoBoard(events);
     const result = await handleMcp({ jsonrpc: "2.0", id: 1, method: "events/subscribe", params: {
       name: "task.created", arguments: {}, delivery,
+      _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} },
     } }, events, board);
     assert.deepEqual((result as { error: { code: number; data: { reason: string } } }).error,
       { code: -32015, message: "The callback challenge failed.", data: { reason: "challenge_failed" } });
     assert.equal(store.all().length, 0);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("caches a callback check and signs with both keys during rotation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mcp-events-"));
+  try {
+    const store = new Store(join(directory, "subscriptions.json"));
+    const sent: { body: string; headers: Record<string, string> }[] = [];
+    const post: Post = async (_url, body, headers) => {
+      sent.push({ body, headers });
+      const payload = JSON.parse(body);
+      return payload.type === "verification" ? { status: 200, body: JSON.stringify({ challenge: payload.challenge }) } : { status: 204, body: "" };
+    };
+    const events = new Events(store, true, post, async () => ({ url: new URL(delivery.url), address: "127.0.0.1", localDemo: true }));
+    const first = await events.subscribe("demo", { name: "task.created", arguments: { project_id: "one" }, delivery });
+    await events.subscribe("demo", { name: "task.created", arguments: { project_id: "two" }, delivery });
+    assert.equal(sent.length, 1);
+    const nextSecret = `whsec_${Buffer.alloc(32, 4).toString("base64")}`;
+    await events.subscribe("demo", { name: "task.created", arguments: { project_id: "one" }, delivery: { ...delivery, secret: nextSecret } });
+    assert.equal(sent.length, 2);
+    await events.emitTask({ id: "task_1", title: "One", project_id: "one", created_at: new Date().toISOString() });
+    assert.equal(sent.length, 3);
+    const event = sent[2];
+    const [newSignature, oldSignature] = event.headers["webhook-signature"].split(" ");
+    assert.equal(newSignature, sign(nextSecret, event.headers["webhook-id"], Number(event.headers["webhook-timestamp"]), event.body));
+    assert.equal(oldSignature, sign(secret, event.headers["webhook-id"], Number(event.headers["webhook-timestamp"]), event.body));
+    assert.equal(store.get(first.id)?.previousSecret, secret);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

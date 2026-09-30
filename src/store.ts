@@ -8,6 +8,8 @@ export type Subscription = {
   arguments: { project_id?: string };
   url: string;
   secret: string;
+  previousSecret?: string;
+  rotationExpiresAt?: string;
   refreshBefore: string;
   active: boolean;
 };

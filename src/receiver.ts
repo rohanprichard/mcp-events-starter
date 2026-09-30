@@ -27,8 +27,11 @@ createServer(async (request, response) => {
     response.writeHead(401).end(); return;
   }
   const expected = Buffer.from(sign(secret, id, timestamp, body));
-  const actual = Buffer.from(signature);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+  const accepted = signature.split(" ").some((value) => {
+    const actual = Buffer.from(value);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  });
+  if (!accepted) {
     response.writeHead(401).end(); return;
   }
   const payload = JSON.parse(body);

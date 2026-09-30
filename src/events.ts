@@ -61,16 +61,21 @@ function subscriptionId(owner: string, url: string, args: { project_id?: string 
 
 function signedHeaders(subscription: Subscription, id: string, body: string) {
   const timestamp = Math.floor(Date.now() / 1000);
+  const signatures = [sign(subscription.secret, id, timestamp, body)];
+  if (subscription.previousSecret && subscription.rotationExpiresAt && subscription.rotationExpiresAt > new Date().toISOString()) {
+    signatures.push(sign(subscription.previousSecret, id, timestamp, body));
+  }
   return {
     "Content-Type": "application/json",
     "webhook-id": id,
     "webhook-timestamp": String(timestamp),
-    "webhook-signature": sign(subscription.secret, id, timestamp, body),
+    "webhook-signature": signatures.join(" "),
     "X-MCP-Subscription-Id": subscription.id,
   };
 }
 
 export class Events {
+  private readonly verifiedCallbacks = new Map<string, number>();
   constructor(
     private readonly store: Store,
     private readonly allowLocalHttp = false,
@@ -99,7 +104,16 @@ export class Events {
       ...identity, id, owner, secret: params.delivery.secret,
       refreshBefore: new Date(Date.now() + lifetime).toISOString(), active: false,
     };
-    if (existing?.active && existing.secret === subscription.secret && existing.refreshBefore > new Date().toISOString()) {
+    if (existing?.active && existing.secret !== subscription.secret && existing.refreshBefore > new Date().toISOString()) {
+      subscription.previousSecret = existing.secret;
+      subscription.rotationExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+    } else if (existing?.previousSecret && existing.rotationExpiresAt && existing.rotationExpiresAt > new Date().toISOString()) {
+      subscription.previousSecret = existing.previousSecret;
+      subscription.rotationExpiresAt = existing.rotationExpiresAt;
+    }
+    const cacheKey = JSON.stringify([owner, identity.url, subscription.secret]);
+    if ((existing?.active && existing.secret === subscription.secret && existing.refreshBefore > new Date().toISOString()) ||
+      (this.verifiedCallbacks.get(cacheKey) ?? 0) > Date.now()) {
       subscription.active = true;
       await this.store.put(subscription);
     } else {
@@ -117,6 +131,7 @@ export class Events {
         }
         subscription.active = true;
         await this.store.put(subscription);
+        this.verifiedCallbacks.set(cacheKey, Date.now() + 5 * 60_000);
       } catch (error) {
         if (existing) await this.store.put(existing);
         else await this.store.remove(id);
